@@ -7,12 +7,12 @@ offsets = [
 
 
 def get_neighbors(node):
-    neighbors = []
+    neighbors = set()
     for offset in offsets:
         x = node.x + offset[0]
         y = node.y + offset[1]
         # TODO: check if square has friendly ship or if current ship is carrying cargo to avoid collisions
-        neighbors.append(Node(x, y))
+        neighbors.add(Node(x, y))
     return neighbors
 
 
@@ -40,14 +40,14 @@ class Node:
 
 def bfs(source, destination):
     queue = [source]
-    visited = []
+    visited = set()
     while queue:
         current = queue.pop(0)
         if current == destination:
             return get_path(current)
         for neighbor in get_neighbors(current):
             if neighbor not in visited:
-                visited.append(neighbor)
+                visited.add(neighbor)
                 neighbor.parent = current
                 queue.append(neighbor)
 
