@@ -39,17 +39,18 @@ class Node:
 
 
 def bfs(source, destination):
-    queue = [source]
+    queue = set()
     visited = set()
+    queue.add(source)
     while queue:
-        current = queue.pop(0)
+        current = queue.pop()
         if current == destination:
             return get_path(current)
         for neighbor in get_neighbors(current):
             if neighbor not in visited:
                 visited.add(neighbor)
                 neighbor.parent = current
-                queue.append(neighbor)
+                queue.add(neighbor)
 
 
 path = bfs(Node(0, 0), Node(10, 10))
