@@ -66,7 +66,7 @@ def get_neighbors(node, board):
         x = node.x + offset[0]
         y = node.y + offset[1]
         p = Point(x, y)
-        if p in board.cells and not board.cells[Point(x, y)].ship_id:
+        if p in board.cells and not board.cells[p].ship_id:
             neighbors.add(Node(x, y))
     return neighbors
 
