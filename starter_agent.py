@@ -16,10 +16,13 @@ min_halite = 100
 desired_cargo = 100
 
 #What's the maximum number of ships we should have?
-max_ships = 10
+max_ships = 8
 
 #What's the maximum number of shipyards we should have?
-max_shipyards = 3
+max_shipyards = 2
+
+#What's the maximum amount of halite that a shipyard can be build on top of? This destroys the Halite underneath
+acceptable_halite_for_shipyard = 0
 
 #Directions a ship can move
 directions = [ShipAction.NORTH, ShipAction.EAST, ShipAction.SOUTH, ShipAction.WEST]
@@ -35,6 +38,10 @@ offsets = [[0, 1],[0, -1],[1, 0],[-1, 0]]
 
 #The list of points representing the ships' navigation
 next_points = []
+
+#Other variables in the game
+num_ships = 1
+num_shipyards = 0
 
 ### FUNCTIONS USED BY YOUR AGENT ###
 
@@ -65,6 +72,7 @@ class Node:
 
 #If in COLLECT state, return whether it has collected enough halite
 #If in DEPOSIT state, return whether it has reached a shipyard yet
+#Note that "current" is a Node
 def is_goal(current, board, ship):
     p = Point(current.x, current.y)
     
@@ -75,6 +83,8 @@ def is_goal(current, board, ship):
         if ship_states[ship.id] == "DEPOSIT":
             for shipyard in board.current_player.shipyards:
                 return p == shipyard.position
+        if ship_states[ship.id] == "CONSTRUCT":
+            return board.cells[p].halite <= acceptable_halite_for_shipyard and p not in [shipyard.position for shipyard in board.current_player.shipyards]
 
 #Return a list of nodes that neighbor the current node that are valid moves
 def get_neighbors(node, board):
@@ -101,6 +111,7 @@ def get_path(node, start):
 # BREADTH-FIRST SEARCH #
 #Searches for the "goal" point of the specified ship, starting from the "source" point
 #The goal depends on the ship's state (ex. if in COLLECT, searches for a space with enough halite)
+#Note that source is a "Node" object
 def locate_goal(source, board, ship):
     queue = set()
     visited = set()
@@ -119,83 +130,103 @@ def locate_goal(source, board, ship):
                 visited.add(neighbor)
                 neighbor.parent = current
                 queue.add(neighbor)
+                
+#This method is used to determine what goal a ship should pursue
+def determine_state(ship, me):
+    if (num_shipyards < max_shipyards and num_ships > 1 and me.halite >= 500) or (num_shipyards == 0 and me.halite + ship.halite >= 1000):
+        ship_states[ship.id] = "CONSTRUCT"
+    elif ship.halite >= desired_cargo:  # If cargo is too low, collect halite
+        ship_states[ship.id] = "DEPOSIT"
+    else: #Otherwise, collect halite
+        ship_states[ship.id] = "COLLECT"
+        
+    
+#Only stay still if ship is on a valid space to collect Halite
+def determine_if_moving(ship, board):
+    if ship_states[ship.id] == "COLLECT" or ship_states[ship.id] == "CONSTRUCT":
+        return not is_goal(Node(ship.position.x, ship.position.y), board, ship)
+    else:
+        return True
+        
+def get_next_move(ship, board, size):
+    #Calculate path to ship's goal, based on their current state
+    current_path[ship.id] = locate_goal(Node(ship.position.x, ship.position.y), board, ship)
+    
+    #If the ship hasn't reached the end of its path yet, calculate the direction to the next node in the path
+    # and travel in that direction
+    if ship.id in current_path and not ship.next_action:
+        ship_path = current_path[ship.id]
+                
+        #If the current path has not yet been traveled by the ship, move to the node in the path
+        if ship_path:
+            next_node = ship_path[0]
+            p = Point(next_node.x, next_node.y)
+                    
+            #If the next id is not a ship and not a position that another ship is going to, move to that space
+            if not board.cells[p].ship_id and p not in next_points:
+                direction = getDirTo(ship.position, p, size)
+                if direction:
+                    ship.next_action = direction
+                    ship_path.remove(p)
+                    next_points.append(p)
+            #If the ship cannot move to the space it wants to, move it to a random valid space
+            else:
+                random_points = get_neighbors(ship.position, board)
+                if random_points:
+                    next_node = random.choice(random_points)
+                    p = Point(next_node.x, next_node.y)
+                    direction = getDirTo(ship.position, p, size)
+                    if direction:
+                        ship.next_action = direction 
+                        next_points.append(p)
 
+def spawn_ship(me):
+    #Only shipyards not currently occupied are valid for conversion
+    valid_shipyards = [shipyard for shipyard in me.shipyards if shipyard.position not in [ship.position for ship in me.ships]]
+    if len(valid_shipyards) > 0:
+        constructing_shipyard = random.choice(valid_shipyards)
+        constructing_shipyard.next_action = ShipyardAction.SPAWN
+        next_points.append(constructing_shipyard.position)
+        
 ### API CALL - USED BY SIMULATOR ###
 # Returns the commands we send to our ships and shipyards
 #This controls what the agent actually does each turn
 def agent(obs, config):
     global turn
     global next_points
+    global num_ships
+    global num_shipyards
     turn += 1
     size = config.size
     board = Board(obs, config)
     me = board.current_player
     
+    num_ships = len(me.ships)
+    num_shipyards = len(me.shipyards)
+    
     #Create a list of ships
     ships_list = me.ships
 
     # If there are not enough ships, spawn a ship at a random shipyard
-    if len(me.ships) < max_ships and len(me.shipyards) > 0 and me.halite > 500:
-        active_shipyard = random.choice(me.shipyards)
-        active_shipyard.next_action = ShipyardAction.SPAWN
-        next_points.append(active_shipyard.position)
-
-    # If there are not enough shipyards, convert random valid ship into shipyard.
-    if (turn == 1) or (len(me.shipyards) < max_shipyards and len(me.ships) > 1 and me.halite > 500):
-        #Only ships not currently in shipyards are valid for conversion
-        valid_ships = [ship for ship in me.ships if ship.position not in [shipyard.position for shipyard in me.shipyards]]
-        if valid_ships:
-            converting_ship = random.choice(me.ships)
-            converting_ship.next_action = ShipAction.CONVERT
-            ships_list.remove(converting_ship)
-            
+    if num_ships < max_ships and num_shipyards > 0 and me.halite > 500:
+        spawn_ship(me)          
 
     #Set the next action of each ship
     for ship in ships_list:
         
         #If ship doesn't have a current state, give it a state (aka a goal to pursue)
         if ship.next_action is None:
-            if ship.halite < desired_cargo:  # If cargo is too low, collect halite
-                ship_states[ship.id] = "COLLECT"
-            if ship.halite >= desired_cargo:  # If cargo gets very big, deposit halite
-                ship_states[ship.id] = "DEPOSIT"
-
-        #If the ship is not on a space with enough halite to collect, figure out where to move
-        if ship.id in ship_states and not (ship_states[ship.id] == "COLLECT" and board.cells[ship.position].halite >= min_halite):
-
-            #Calculate path to ship's goal
-            current_path[ship.id] = locate_goal(Node(ship.position.x, ship.position.y), board, ship)
-
-            #If the ship hasn't reached the end of its path yet, calculate the direction to the next node in the path
-            # and travel in that direction
-            if ship.id in current_path and not ship.next_action:
-
-                ship_path = current_path[ship.id]
-                
-                #If the current path has not yet been traveled by the ship, move to the node in the path
-                if ship_path:
-                    next_node = ship_path[0]
-                    p = Point(next_node.x, next_node.y)
-                    
-                    #If the next id is not a ship and not a position that another ship is going to, move to that space
-                    if not board.cells[p].ship_id and p not in next_points:
-                        direction = getDirTo(ship.position, p, size)
-                        if direction:
-                            ship.next_action = direction
-                            ship_path.remove(p)
-                            next_points.append(p)
-                    #If the ship cannot move to the space it wants to, move it to a random valid space
-                    else:
-                        random_points = get_neighbors(ship.position, board)
-                        if random_points:
-                            next_node = random.choice(random_points)
-                            p = Point(next_node.x, next_node.y)
-                            direction = getDirTo(ship.position, p, size)
-                            if direction:
-                                ship.next_action = direction 
-                                next_points.append(p)
+            determine_state(ship, me)
+        
+        #Decide which action to take next
+        if ship.id in ship_states and determine_if_moving(ship, board):
+            get_next_move(ship, board, size)
+        #If the ship has reached valid area for shipyard, convert to shipyard
+        elif ship_states[ship.id] == "CONSTRUCT":
+            ship.next_action = ShipAction.CONVERT
+            num_shipyards += 1
+        #Otherwise, let other ships know that this ship is remaining stationary
         else:
-            #If the ship is not moving, set its next point as its current point
             next_points.append(ship.position)
 
     #Now that all the ships have been calculated, clear the next_points to prepare for the next round (otherwise ships will freeze)
