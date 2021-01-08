@@ -18,6 +18,7 @@ directions = [ShipAction.NORTH, ShipAction.EAST, ShipAction.SOUTH, ShipAction.WE
 
 # Will keep track of whether a ship is collecting halite or carrying cargo to a shipyard
 ship_states = {}
+occupied_tiles = {}
 
 # Returns the commands we send to our ships and shipyards
 def agent(obs, config):
@@ -33,7 +34,6 @@ def agent(obs, config):
     if len(me.shipyards) == 0 and len(me.ships) > 0:
         me.ships[0].next_action = ShipAction.CONVERT
         
-    next_moves = []
     for ship in me.ships:
         if ship.next_action == None:
             
@@ -55,9 +55,5 @@ def agent(obs, config):
                 # Move towards shipyard to deposit cargo
                 direction = getDirTo(ship.position, me.shipyards[0].position, size)
                 if me.shipyards[0].cell.ship == None: ship.next_action = direction
-        board_test = board.next()
-        for s in board_test.current_player.ships:
-            if (ship.cell == s.cell and s != s) or ship.cell == me.shipyards[0]:
-                ship.next_action = None
         
     return me.next_actions
