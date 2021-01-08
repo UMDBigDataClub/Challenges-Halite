@@ -4,15 +4,14 @@ from kaggle_environments.envs.halite.helpers import *
 import random
 
 #### ATTRIBUTES THAT YOUR AGENT WILL TRACK ####
-turn = 0
 
-#How much halite should a space have for a ship to harvest it?
+#How much halite should a space have at minimum for a ship to harvest it?
 target_halite = 120
 
 #How much halite should a space have for a ship to stop harvesting?
 min_halite = 100
 
-#How much halite should the ship be able to collect before returning to base?
+#How much halite should the ship collect before returning to base?
 desired_cargo = 100
 
 #What's the maximum number of ships we should have?
@@ -20,6 +19,9 @@ max_ships = 8
 
 #What's the maximum number of shipyards we should have?
 max_shipyards = 2
+
+#When should the bot stop making ships and focus on only collecting halite?
+endgame_turn = 380
 
 #What's the maximum amount of halite that a shipyard can be build on top of? This destroys the Halite underneath
 acceptable_halite_for_shipyard = 0
@@ -40,6 +42,7 @@ offsets = [[0, 1],[0, -1],[1, 0],[-1, 0]]
 next_points = []
 
 #Other variables in the game
+turn = 0
 num_ships = 1
 num_shipyards = 0
 
@@ -133,7 +136,7 @@ def locate_goal(source, board, ship):
                 
 #This method is used to determine what goal a ship should pursue
 def determine_state(ship, me):
-    if (num_shipyards < max_shipyards and num_ships > 1 and me.halite >= 500) or (num_shipyards == 0 and me.halite + ship.halite >= 1000):
+    if (num_shipyards < max_shipyards and num_ships > 1 and me.halite + ship.halite >= 500) or (num_shipyards == 0 and me.halite + ship.halite >= 1000):
         ship_states[ship.id] = "CONSTRUCT"
     elif ship.halite >= desired_cargo:  # If cargo is too low, collect halite
         ship_states[ship.id] = "DEPOSIT"
@@ -208,7 +211,7 @@ def agent(obs, config):
     ships_list = me.ships
 
     # If there are not enough ships, spawn a ship at a random shipyard
-    if num_ships < max_ships and num_shipyards > 0 and me.halite > 500:
+    if num_ships < max_ships and num_shipyards > 0 and me.halite > 500 and turn < endgame_turn:
         spawn_ship(me)          
 
     #Set the next action of each ship
